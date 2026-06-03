@@ -3,6 +3,7 @@ Reward Points Ledger Service
 
 ## Project Directory Structure
 
+```
 reward-points-ledger/
 ├── cmd/
 │   └── api/
@@ -23,6 +24,7 @@ reward-points-ledger/
 ├── Dockerfile
 ├── go.mod
 └── go.sum
+```
 
 ## How to run locally
 
