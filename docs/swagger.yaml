@@ -1,0 +1,70 @@
+openapi: 3.0.3
+info:
+  title: Fintech Rewards Points Ledger API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Local Go Ledger API Backend Server
+paths:
+  /members:
+    post:
+      summary: Create a new member account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email]
+              properties:
+                name: { type: string, example: "Alice Johnson" }
+                email: { type: string, example: "alice@example.com" }
+      responses:
+        '201':
+          description: Created
+        '409':
+          description: Email Already Registered
+  /members/{memberId}:
+    get:
+      summary: Get member info and balance
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Success
+        '404':
+          description: Member Not Found
+  /rewards:
+    post:
+      summary: Process a point transaction ledger entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [member_id, point_type_id, points, description]
+              properties:
+                member_id: { type: integer, example: 1 }
+                point_type_id: { type: integer, example: 1 }
+                points: { type: integer, example: 500 }
+                description: { type: string, example: "Purchase at Store A" }
+      responses:
+        '201':
+          description: Entry Logged
+        '422':
+          description: Insufficient Balance for redemption
+  /members/{memberId}/rewards:
+    get:
+      summary: Fetch tracking timeline for a specific account identity
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Success
