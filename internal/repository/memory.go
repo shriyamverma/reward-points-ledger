@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"reward-points-ledger/internal/domain"
 	"strings"
 	"sync"
@@ -24,7 +25,7 @@ func NewMemoryRepository() *MemoryRepository {
 	}
 }
 
-func (r *MemoryRepository) CreateMember(name, email string) (*domain.Member, error) {
+func (r *MemoryRepository) CreateMember(ctx context.Context, name, email string) (*domain.Member, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -45,7 +46,7 @@ func (r *MemoryRepository) CreateMember(name, email string) (*domain.Member, err
 	return member, nil
 }
 
-func (r *MemoryRepository) GetMemberByID(id int) (*domain.Member, error) {
+func (r *MemoryRepository) GetMemberByID(ctx context.Context, id int) (*domain.Member, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -62,7 +63,7 @@ func (r *MemoryRepository) GetMemberByID(id int) (*domain.Member, error) {
 	}, nil
 }
 
-func (r *MemoryRepository) GetRewardsByMemberID(id int) ([]domain.RewardEntry, error) {
+func (r *MemoryRepository) GetRewardsByMemberID(ctx context.Context, id int) ([]domain.RewardEntry, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -75,7 +76,7 @@ func (r *MemoryRepository) GetRewardsByMemberID(id int) ([]domain.RewardEntry, e
 	return result, nil
 }
 
-func (r *MemoryRepository) GetBalance(memberID int) (int, error) {
+func (r *MemoryRepository) GetBalance(ctx context.Context, memberID int) (int, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -89,7 +90,7 @@ func (r *MemoryRepository) GetBalance(memberID int) (int, error) {
 	return balance, nil
 }
 
-func (r *MemoryRepository) AddRewardEntry(memberID, pointTypeID, points int, desc string) (*domain.RewardEntry, error) {
+func (r *MemoryRepository) AddRewardEntry(ctx context.Context, memberID, pointTypeID, points int, desc string) (*domain.RewardEntry, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

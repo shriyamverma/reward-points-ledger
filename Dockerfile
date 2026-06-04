@@ -8,7 +8,7 @@ RUN go mod download
 
 # Copy source trees and compile
 COPY . .
-RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o rewards-api ./cmd/api/main.go
+RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o rewards-api ./cmd/api/
 
 # --- Stage 2: Runtime Minimal Image Environment ---
 FROM alpine:3.20

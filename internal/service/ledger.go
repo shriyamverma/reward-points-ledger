@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"reward-points-ledger/internal/domain"
 	"reward-points-ledger/internal/repository"
 )
@@ -13,16 +14,16 @@ func NewLedgerService(repo repository.Repository) *LedgerService {
 	return &LedgerService{repo: repo}
 }
 
-func (s *LedgerService) CreateMember(name, email string) (*domain.Member, error) {
-	return s.repo.CreateMember(name, email)
+func (s *LedgerService) CreateMember(ctx context.Context, name, email string) (*domain.Member, error) {
+	return s.repo.CreateMember(ctx, name, email)
 }
 
-func (s *LedgerService) GetMember(id int) (*domain.Member, error) {
-	member, err := s.repo.GetMemberByID(id)
+func (s *LedgerService) GetMember(ctx context.Context, id int) (*domain.Member, error) {
+	member, err := s.repo.GetMemberByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	balance, err := s.repo.GetBalance(id)
+	balance, err := s.repo.GetBalance(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -30,15 +31,15 @@ func (s *LedgerService) GetMember(id int) (*domain.Member, error) {
 	return member, nil
 }
 
-func (s *LedgerService) GetRewards(memberID int) ([]domain.RewardEntry, error) {
+func (s *LedgerService) GetRewards(ctx context.Context, memberID int) ([]domain.RewardEntry, error) {
 	// Verify user profile exists first
-	if _, err := s.repo.GetMemberByID(memberID); err != nil {
+	if _, err := s.repo.GetMemberByID(ctx, memberID); err != nil {
 		return nil, err
 	}
-	return s.repo.GetRewardsByMemberID(memberID)
+	return s.repo.GetRewardsByMemberID(ctx, memberID)
 }
 
-func (s *LedgerService) ProcessReward(memberID, pointTypeID, points int, desc string) (*domain.RewardEntry, error) {
+func (s *LedgerService) ProcessReward(ctx context.Context, memberID, pointTypeID, points int, desc string) (*domain.RewardEntry, error) {
 	if pointTypeID < 1 || pointTypeID > 4 {
 		return nil, domain.ErrInvalidPointType
 	}
@@ -47,7 +48,7 @@ func (s *LedgerService) ProcessReward(memberID, pointTypeID, points int, desc st
 	}
 
 	// Verify target identity exists
-	if _, err := s.repo.GetMemberByID(memberID); err != nil {
+	if _, err := s.repo.GetMemberByID(ctx, memberID); err != nil {
 		return nil, err
 	}
 
@@ -55,7 +56,7 @@ func (s *LedgerService) ProcessReward(memberID, pointTypeID, points int, desc st
 	if pointTypeID == domain.TypeRedemption {
 		calculatedPoints = -points
 
-		currentBalance, err := s.repo.GetBalance(memberID)
+		currentBalance, err := s.repo.GetBalance(ctx, memberID)
 		if err != nil {
 			return nil, err
 		}
@@ -64,5 +65,5 @@ func (s *LedgerService) ProcessReward(memberID, pointTypeID, points int, desc st
 		}
 	}
 
-	return s.repo.AddRewardEntry(memberID, pointTypeID, calculatedPoints, desc)
+	return s.repo.AddRewardEntry(ctx, memberID, pointTypeID, calculatedPoints, desc)
 }

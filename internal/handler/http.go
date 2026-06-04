@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"log/slog"
 	"net/http"
 	"reward-points-ledger/internal/domain"
 	"reward-points-ledger/internal/service"
@@ -11,11 +13,11 @@ import (
 )
 
 type HTTPHandler struct {
-	svc *service.LedgerService
+	service *service.LedgerService
 }
 
-func NewHTTPHandler(svc *service.LedgerService) *HTTPHandler {
-	return &HTTPHandler{svc: svc}
+func NewHTTPHandler(service *service.LedgerService) *HTTPHandler {
+	return &HTTPHandler{service: service}
 }
 
 // ErrorResponse structural blueprint
@@ -23,7 +25,20 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-func respondWithError(w http.ResponseWriter, code int, msg string) {
+func respondWithError(w http.ResponseWriter, r *http.Request, code int, msg string) {
+	logFields := []interface{}{
+		"request_id", middleware.GetReqID(r.Context()),
+		"method", r.Method,
+		"path", r.URL.Path,
+		"status_code", code,
+		"error_message", msg,
+	}
+	if code >= 500 {
+		slog.Error("HTTP handler request failed", logFields...)
+	} else {
+		slog.Warn("HTTP handler request rejected", logFields...)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(ErrorResponse{Error: msg})
@@ -36,48 +51,54 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 }
 
 func (h *HTTPHandler) CreateMember(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	var input struct {
 		Name  string `json:"name"`
 		Email string `json:"email"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Name == "" || input.Email == "" {
-		respondWithError(w, http.StatusBadRequest, "Invalid input. Name and email are required.")
+		respondWithError(w, r, http.StatusBadRequest, "Invalid input. Name and email are required.")
 		return
 	}
 
-	m, err := h.svc.CreateMember(input.Name, input.Email)
+	m, err := h.service.CreateMember(ctx, input.Name, input.Email)
 	if err != nil {
 		if errors.Is(err, domain.ErrDuplicateEmail) {
-			respondWithError(w, http.StatusConflict, err.Error())
+			respondWithError(w, r, http.StatusConflict, err.Error())
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Internal server error")
+		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 	respondWithJSON(w, http.StatusCreated, m)
 }
 
 func (h *HTTPHandler) GetMember(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	idStr := chi.URLParam(r, "memberId")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid member ID format")
+		respondWithError(w, r, http.StatusBadRequest, "Invalid member ID format")
 		return
 	}
 
-	m, err := h.svc.GetMember(id)
+	m, err := h.service.GetMember(ctx, id)
 	if err != nil {
 		if errors.Is(err, domain.ErrMemberNotFound) {
-			respondWithError(w, http.StatusNotFound, err.Error())
+			respondWithError(w, r, http.StatusNotFound, err.Error())
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Internal server error")
+		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 	respondWithJSON(w, http.StatusOK, m)
 }
 
 func (h *HTTPHandler) CreateReward(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	var input struct {
 		MemberID    int    `json:"member_id"`
 		PointTypeID int    `json:"point_type_id"`
@@ -85,21 +106,21 @@ func (h *HTTPHandler) CreateReward(w http.ResponseWriter, r *http.Request) {
 		Description string `json:"description"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Malformed JSON request body")
+		respondWithError(w, r, http.StatusBadRequest, "Malformed JSON request body")
 		return
 	}
 
-	rw, err := h.svc.ProcessReward(input.MemberID, input.PointTypeID, input.Points, input.Description)
+	rw, err := h.service.ProcessReward(ctx, input.MemberID, input.PointTypeID, input.Points, input.Description)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrMemberNotFound):
-			respondWithError(w, http.StatusNotFound, err.Error())
+			respondWithError(w, r, http.StatusNotFound, err.Error())
 		case errors.Is(err, domain.ErrInvalidPointType), errors.Is(err, domain.ErrPointsNotPositive):
-			respondWithError(w, http.StatusBadRequest, err.Error())
+			respondWithError(w, r, http.StatusBadRequest, err.Error())
 		case errors.Is(err, domain.ErrInsufficientBalance):
-			respondWithError(w, http.StatusUnprocessableEntity, err.Error())
+			respondWithError(w, r, http.StatusUnprocessableEntity, err.Error())
 		default:
-			respondWithError(w, http.StatusInternalServerError, "Internal server error")
+			respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
 		}
 		return
 	}
@@ -107,20 +128,22 @@ func (h *HTTPHandler) CreateReward(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPHandler) GetMemberRewards(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	idStr := chi.URLParam(r, "memberId")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid member ID format")
+		respondWithError(w, r, http.StatusBadRequest, "Invalid member ID format")
 		return
 	}
 
-	entries, err := h.svc.GetRewards(id)
+	entries, err := h.service.GetRewards(ctx, id)
 	if err != nil {
 		if errors.Is(err, domain.ErrMemberNotFound) {
-			respondWithError(w, http.StatusNotFound, err.Error())
+			respondWithError(w, r, http.StatusNotFound, err.Error())
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Internal server error")
+		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 

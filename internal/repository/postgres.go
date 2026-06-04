@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"errors"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgconn"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -25,8 +27,7 @@ func NewPostgresRepository(pool PostgreSQLPool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
-func (r *PostgresRepository) CreateMember(name, email string) (*domain.Member, error) {
-	ctx := context.Background()
+func (r *PostgresRepository) CreateMember(ctx context.Context, name, email string) (*domain.Member, error) {
 	cleanEmail := strings.ToLower(strings.TrimSpace(email))
 
 	// Let Postgres handle NOW() inside the CTE layer
@@ -47,6 +48,8 @@ func (r *PostgresRepository) CreateMember(name, email string) (*domain.Member, e
 		"name":  name,
 		"email": cleanEmail,
 	}
+	reqID := middleware.GetReqID(ctx)
+	slog.Debug("executing database raw query", "request_id", reqID, "op", "CreateMember", "query", query, "args", args)
 
 	var memberID int
 	var dbCreatedAt time.Time
@@ -66,11 +69,12 @@ func (r *PostgresRepository) CreateMember(name, email string) (*domain.Member, e
 	}, nil
 }
 
-func (r *PostgresRepository) GetMemberByID(id int) (*domain.Member, error) {
-	ctx := context.Background()
+func (r *PostgresRepository) GetMemberByID(ctx context.Context, id int) (*domain.Member, error) {
 	query := `SELECT member_id, name, email, created_at FROM members WHERE member_id = @id`
 
 	args := pgx.NamedArgs{"id": id}
+	reqID := middleware.GetReqID(ctx)
+	slog.Debug("executing database raw query", "request_id", reqID, "op", "GetMemberByID", "query", query, "args", args)
 
 	var m domain.Member
 	var createdAtTime time.Time
@@ -85,9 +89,7 @@ func (r *PostgresRepository) GetMemberByID(id int) (*domain.Member, error) {
 	return &m, nil
 }
 
-func (r *PostgresRepository) AddRewardEntry(memberID, pointTypeID, points int, desc string) (*domain.RewardEntry, error) {
-	ctx := context.Background()
-
+func (r *PostgresRepository) AddRewardEntry(ctx context.Context, memberID, pointTypeID, points int, desc string) (*domain.RewardEntry, error) {
 	// Uniformly updated to use NOW() on insert and scan it right back out
 	query := `INSERT INTO rewards (member_id, point_type_id, points, description, event_date) 
               VALUES (@member_id, @point_type_id, @points, @description, NOW()) 
@@ -99,6 +101,8 @@ func (r *PostgresRepository) AddRewardEntry(memberID, pointTypeID, points int, d
 		"points":        points,
 		"description":   desc,
 	}
+	reqID := middleware.GetReqID(ctx)
+	slog.Debug("executing database raw query", "request_id", reqID, "op", "AddRewardEntry", "query", query, "args", args)
 
 	var rewardID int
 	var dbEventDate time.Time
@@ -106,6 +110,12 @@ func (r *PostgresRepository) AddRewardEntry(memberID, pointTypeID, points int, d
 	if err != nil {
 		return nil, err
 	}
+
+	slog.Info("reward points successfully updated in ledger",
+		"request_id", middleware.GetReqID(ctx),
+		"member_id", memberID,
+		"points_added", points,
+	)
 
 	return &domain.RewardEntry{
 		RewardID:    rewardID,
@@ -117,11 +127,12 @@ func (r *PostgresRepository) AddRewardEntry(memberID, pointTypeID, points int, d
 	}, nil
 }
 
-func (r *PostgresRepository) GetRewardsByMemberID(id int) ([]domain.RewardEntry, error) {
-	ctx := context.Background()
+func (r *PostgresRepository) GetRewardsByMemberID(ctx context.Context, id int) ([]domain.RewardEntry, error) {
 	query := `SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards WHERE member_id = @member_id`
 
 	args := pgx.NamedArgs{"member_id": id}
+	reqID := middleware.GetReqID(ctx)
+	slog.Debug("executing database raw query", "request_id", reqID, "op", "GetRewardsByMemberID", "query", query, "args", args)
 
 	rows, err := r.pool.Query(ctx, query, args)
 	if err != nil {
@@ -142,11 +153,13 @@ func (r *PostgresRepository) GetRewardsByMemberID(id int) ([]domain.RewardEntry,
 	return results, nil
 }
 
-func (r *PostgresRepository) GetBalance(memberID int) (int, error) {
-	ctx := context.Background()
+func (r *PostgresRepository) GetBalance(ctx context.Context, memberID int) (int, error) {
 	query := `SELECT COALESCE(SUM(points), 0) FROM rewards WHERE member_id = @member_id`
 
 	args := pgx.NamedArgs{"member_id": memberID}
+	// Trace the exact SQL footprint
+	reqID := middleware.GetReqID(ctx)
+	slog.Debug("executing database raw query", "request_id", reqID, "op", "GetBalance", "query", query, "args", args)
 
 	var balance int
 	err := r.pool.QueryRow(ctx, query, args).Scan(&balance)

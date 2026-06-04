@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"reward-points-ledger/internal/handler"
@@ -12,6 +12,8 @@ import (
 )
 
 func main() {
+	InitLogger()
+
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		dbURL = "postgres://root:password@localhost:5432/rewards_db?sslmode=disable"
@@ -20,7 +22,7 @@ func main() {
 	// Call the DB initialization function
 	pool, err := repository.InitDBPool(dbURL)
 	if err != nil {
-		log.Fatalf("Fatal initialization crash: %v", err)
+		slog.Error("Fatal DB initialization crash", "error", err)
 	}
 	defer pool.Close()
 
@@ -32,7 +34,7 @@ func main() {
 
 	// 2. Router Configurations & Global Middleware
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
+	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 	r.Use(handler.CORSMiddleware())
 
@@ -42,8 +44,8 @@ func main() {
 	r.Post("/rewards", h.CreateReward)
 	r.Get("/members/{memberId}/rewards", h.GetMemberRewards)
 
-	log.Println("Reward points ledger service running on port :8080...")
+	slog.Info("Reward points ledger service running on port :8080...")
 	if err := http.ListenAndServe(":8080", r); err != nil {
-		log.Fatalf("Server lifecycle crash: %v", err)
+		slog.Error("Server lifecycle crash", "error", err)
 	}
 }
