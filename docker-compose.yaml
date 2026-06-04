@@ -13,6 +13,7 @@ services:
       - PORT=8080
       # Provide the connection string to our Go application
       - DATABASE_URL=postgres://root:password@postgres-db:5432/rewards_db?sslmode=disable
+      - LOG_LEVEL=debug
     # Ensure the database container starts first
     depends_on:
       - postgres-db

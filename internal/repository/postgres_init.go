@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,7 +33,7 @@ func InitDBPool(dbURL string) (*pgxpool.Pool, error) {
 		cancel() // Release context resources immediately
 
 		if err == nil {
-			log.Printf("Successfully established secure connection pool with PostgreSQL cluster.")
+			slog.Info("Successfully established secure connection pool with PostgreSQL cluster.")
 			return pool, nil // Success! Return the active pool
 		}
 
@@ -42,7 +42,7 @@ func InitDBPool(dbURL string) (*pgxpool.Pool, error) {
 			pool.Close()
 		}
 
-		log.Printf("[Attempt %d/10] Database unavailable, retrying in 2s... Error: %v", i, err)
+		slog.Warn("Database unavailable, retrying in 2s", "attempt", i, "max_attempts", 10, "error", err)
 		time.Sleep(2 * time.Second)
 	}
 

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ func TestPostgresRepository_CreateMember_Success(t *testing.T) {
 		}).
 		WillReturnRows(pgxmock.NewRows([]string{"member_id", "created_at"}).AddRow(1, mockTime))
 
-	member, err := repo.CreateMember(name, email)
+	member, err := repo.CreateMember(context.Background(), name, email)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -65,7 +66,7 @@ func TestPostgresRepository_CreateMember_DuplicateEmail(t *testing.T) {
 		}).
 		WillReturnError(pgx.ErrNoRows)
 
-	_, err = repo.CreateMember(name, email)
+	_, err = repo.CreateMember(context.Background(), name, email)
 	if !errors.Is(err, domain.ErrDuplicateEmail) {
 		t.Errorf("Expected domain.ErrDuplicateEmail, got: %v", err)
 	}
@@ -95,7 +96,7 @@ func TestPostgresRepository_GetMemberByID_Success(t *testing.T) {
 		WillReturnRows(pgxmock.NewRows([]string{"member_id", "name", "email", "created_at"}).
 			AddRow(memberID, "Bob Smith", "bob@example.com", mockTime))
 
-	member, err := repo.GetMemberByID(memberID)
+	member, err := repo.GetMemberByID(context.Background(), memberID)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -122,7 +123,7 @@ func TestPostgresRepository_GetMemberByID_NotFound(t *testing.T) {
 		WithArgs(pgx.NamedArgs{"id": memberID}).
 		WillReturnError(pgx.ErrNoRows)
 
-	_, err = repo.GetMemberByID(memberID)
+	_, err = repo.GetMemberByID(context.Background(), memberID)
 	if !errors.Is(err, domain.ErrMemberNotFound) {
 		t.Errorf("Expected domain.ErrMemberNotFound, got: %v", err)
 	}
@@ -155,7 +156,7 @@ func TestPostgresRepository_GetRewardsByMemberID_Success(t *testing.T) {
 		WithArgs(pgx.NamedArgs{"member_id": memberID}).
 		WillReturnRows(rows)
 
-	rewards, err := repo.GetRewardsByMemberID(memberID)
+	rewards, err := repo.GetRewardsByMemberID(context.Background(), memberID)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -186,7 +187,7 @@ func TestPostgresRepository_GetRewardsByMemberID_EmptyList(t *testing.T) {
 		WithArgs(pgx.NamedArgs{"member_id": memberID}).
 		WillReturnRows(rows)
 
-	rewards, err := repo.GetRewardsByMemberID(memberID)
+	rewards, err := repo.GetRewardsByMemberID(context.Background(), memberID)
 	if err != nil {
 		t.Errorf("Expected zero runtime error on empty user ledger search, got: %v", err)
 	}
@@ -213,7 +214,7 @@ func TestPostgresRepository_GetBalance_Success(t *testing.T) {
 		WithArgs(pgx.NamedArgs{"member_id": memberID}).
 		WillReturnRows(pgxmock.NewRows([]string{"balance"}).AddRow(450))
 
-	balance, err := repo.GetBalance(memberID)
+	balance, err := repo.GetBalance(context.Background(), memberID)
 	if err != nil {
 		t.Errorf("Expected successful balance calculation, got error: %v", err)
 	}
@@ -250,7 +251,7 @@ func TestPostgresRepository_AddRewardEntry_Success(t *testing.T) {
 		}).
 		WillReturnRows(pgxmock.NewRows([]string{"reward_id", "event_date"}).AddRow(999, mockTime))
 
-	entry, err := repo.AddRewardEntry(memberID, pointTypeID, points, description)
+	entry, err := repo.AddRewardEntry(context.Background(), memberID, pointTypeID, points, description)
 	if err != nil {
 		t.Errorf("Expected safe append operation, got error: %v", err)
 	}
@@ -277,7 +278,7 @@ func TestPostgresRepository_GenericDatabaseErrorPropagation(t *testing.T) {
 		WithArgs(pgx.NamedArgs{"member_id": 1}).
 		WillReturnError(dbFatalErr)
 
-	_, err = repo.GetBalance(1)
+	_, err = repo.GetBalance(context.Background(), 1)
 	if err == nil || err.Error() != "conn_lost: driver closed unexpected pipe protocol channel" {
 		t.Errorf("Expected generic driver error to bubble up verbatim, got: %v", err)
 	}
