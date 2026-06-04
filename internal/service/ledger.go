@@ -6,10 +6,10 @@ import (
 )
 
 type LedgerService struct {
-	repo repository.LedgerRepository
+	repo repository.Repository
 }
 
-func NewLedgerService(repo repository.LedgerRepository) *LedgerService {
+func NewLedgerService(repo repository.Repository) *LedgerService {
 	return &LedgerService{repo: repo}
 }
 

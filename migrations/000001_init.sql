@@ -1,0 +1,15 @@
+CREATE TABLE IF NOT EXISTS members (
+    member_id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rewards (
+    reward_id SERIAL PRIMARY KEY,
+    member_id INT REFERENCES members(member_id),
+    point_type_id INT NOT NULL,
+    points INT NOT NULL,
+    description TEXT NOT NULL,
+    event_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

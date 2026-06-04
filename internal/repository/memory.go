@@ -7,14 +7,6 @@ import (
 	"time"
 )
 
-type LedgerRepository interface {
-	CreateMember(name, email string) (*domain.Member, error)
-	GetMemberByID(id int) (*domain.Member, error)
-	GetRewardsByMemberID(id int) ([]domain.RewardEntry, error)
-	AddRewardEntry(memberID, pointTypeID, points int, desc string) (*domain.RewardEntry, error)
-	GetBalance(memberID int) (int, error)
-}
-
 type MemoryRepository struct {
 	mu           sync.RWMutex
 	members      map[int]*domain.Member
