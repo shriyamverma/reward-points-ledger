@@ -1,6 +1,21 @@
 # Reward Points Ledger Service
 
-A production-ready, highly resilient, and fully containerized fintech rewards engine built in Go. The system tracks loyalty member profiles, logs transactional point allocations, and performs running-sum balance calculations using clean architecture principles and a persistent PostgreSQL storage engine.
+A production-ready, highly resilient, and fully containerized fintech rewards engine built in `Go`. The system tracks member profiles, logs transactional point allocations, and performs running-sum balance calculations using clean architecture principles and a persistent PostgreSQL storage engine.
+
+## ⚡ Quick-Start Shortcuts (Makefile)
+
+The project includes a `Makefile` to abstract complex Docker and Go commands into simple shortcuts:
+
+* Boot up the full environment: `make up`
+* Teardown the containers: `make down`
+* Wipe database volumes for a clean seed reset: `make clean`
+* Run the complete mock unit test suite: `make test`
+* View visual HTML test coverage reports: `make cover`
+* Audit live database records instantly via console: `make db-audit`
+* Open an interactive PostgreSQL CLI session: `make db-shell`
+* Generate sequential schema files: `make migrate-create name=migration_name`
+* Deploy pending database changes: `make migrate-up`
+* Rollback the latest schema layer: `make migrate-down`
 
 ## 🛠 Architecture Overview
 
@@ -15,6 +30,10 @@ The system strictly adheres to **Clean Architecture / Domain-Driven Design (DDD)
 
 ```text
 reward-points-ledger/
+├── .github/
+│   └── workflows/
+│       ├── ci.yaml                 # Continuous Integration (PR Gates)
+│       └── cd.yaml                 # Continuous Delivery (Releases)
 ├── cmd/
 │   └── api/
 │       └── main.go                 # Application entry point & orchestration
@@ -27,6 +46,9 @@ reward-points-ledger/
 │   │   ├── http.go                # REST HTTP Controllers
 │   │   └── middleware.go          # Custom self-contained CORS middleware
 │   ├── repository/
+│   │   ├── migrations/                # Schema tracking directory
+│   │   │   ├── 000001_init.up.sql     # Baseline tables setup schema
+│   │   │   └── 000001_init.down.sql   # Reversal schema pattern
 │   │   ├── memory.go              # Legacy/Testing Ephemeral Storage
 │   │   ├── postgres.go            # Production PGX persistence engine
 │   │   ├── postgres_init.go       # High-resilience DB connection retry lifecycle
@@ -34,10 +56,11 @@ reward-points-ledger/
 │   └── service/
 │       ├── ledger.go              # Core ledger business rules service
 │       └── ledger_test.go         # Domain service behavior verification tests
-├── docker-compose.yaml            # Multi-stage API & PostgreSQL stack definition
+├── docker-compose.yaml            # Local Infrastructure Cluster Definition
 ├── Dockerfile                     # Multi-stage scratch production compiler blueprint
-├── go.mod
-└── go.sum
+├── go.mod                         # Go Module Specifications (Target: 1.25.11)
+├── go.sum                         # Driver Checksums
+└── Makefile                       # Developer Workflow Control Center
 ```
 
 ## 🚀 Key Technical Features
@@ -112,4 +135,57 @@ docker exec -it rewards_ledger_db psql -U root -d rewards_db -c "SELECT * FROM r
 -----------+-----------+---------------+--------+-----------------+-------------------------------
          1 |         1 |             1 |    100 | Welcome Bonus   | 2026-06-04 07:45:15.654321+00
 
+```
+
+### 📜 Migration Strategy
+
+Every database structural adjustment requires two corresponding files inside the `internal/repository/migrations` directory:
+1. `XXXXXX_name.up.sql`: Applies the delta schema upgrades (e.g., creating tables, adding columns).
+2. `XXXXXX_name.down.sql`: Implements a strict rollback strategy to reverse the exact changes made by the companion `up` script.
+
+The schema lifecycle is automatically tracked inside a dedicated metadata table (`schema_migrations`) managed directly inside our live PostgreSQL cluster.
+
+### 🛠️ Migration Workflows
+
+The centralized `Makefile` streamlines migration operations into simple, highly intuitive shortcut targets:
+
+#### 1. Generate New Migration Scaffolding
+To create a new sequential up/down pair of empty SQL files, pass the descriptive snake-case `name` variable directly into the engine:
+```bash
+make migrate-create name=add_member_tier_status
+```
+
+*This will instantly generate `000002_add_member_tier_status.up.sql` and `000002_add_member_tier_status.down.sql` within our local source tree.*
+
+#### 2. Apply Pending Migrations
+
+To upgrade your running PostgreSQL schema to the latest structural configuration, execute:
+
+```bash
+make migrate-up
+```
+
+#### 3. Rollback the Last Applied Schema State
+
+If we need to step backward by a single migration execution block during active feature prototyping or hotfixes, run:
+
+```bash
+make migrate-down
+```
+
+### 🔍 Operational Status Audit
+
+To audit exactly which migration version step your database engine is currently sitting on, you can execute a direct terminal readout against the inner state metadata:
+
+```bash
+docker exec -it rewards_ledger_db psql -U root -d rewards_db -c "SELECT * FROM schema_migrations;"
+```
+
+Our system console will display the operational index mapping matrix:
+
+```text
+ version | dirty 
+---------+-------
+       2 | f
+(1 row)
 ```
