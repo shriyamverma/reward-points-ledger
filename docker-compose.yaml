@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # The Core Go API Ledger Service
+  # 1. The Core Go API Ledger Service
   rewards-api:
     build:
       context: .
@@ -11,25 +11,52 @@ services:
       - "8080:8080"
     environment:
       - PORT=8080
+      # Provide the connection string to our Go application
+      - DATABASE_URL=postgres://root:password@postgres-db:5432/rewards_db?sslmode=disable
+    # Ensure the database container starts first
+    depends_on:
+      - postgres-db
     restart: unless-stopped
     networks:
       - rewards-network
 
-  # Interactive Swagger UI Documentation Engine
+  # 2. Durable PostgreSQL Instance
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: rewards_ledger_db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=rewards_db
+    volumes:
+      # Automatically initializes schemas on startup by mounting your SQL file
+      - ./migrations/000001_init.sql:/docker-entrypoint-initdb.d/000001_init.sql:ro
+      # Persistent local named disk storage so data isn't lost when containers stop
+      - pg-data-volume:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - rewards-network
+
+  # 3. Interactive Swagger UI Documentation Engine
   swagger-ui:
     image: swaggerapi/swagger-ui:v5.11.0
     container_name: rewards_ledger_swagger
     ports:
       - "8081:8080"
     environment:
-      # temporary staging path
       - SWAGGER_JSON=/tmp/swagger.yaml
     volumes:
-      # pointing the container destination path to /tmp/swagger.yaml
       - ./docs/swagger.yaml:/tmp/swagger.yaml:ro
     restart: unless-stopped
     networks:
       - rewards-network
+
+# Define the persistent volume used by Postgres
+volumes:
+  pg-data-volume:
+    driver: local
 
 networks:
   rewards-network:
