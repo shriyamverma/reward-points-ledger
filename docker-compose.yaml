@@ -32,7 +32,7 @@ services:
       - POSTGRES_DB=rewards_db
     volumes:
       # Automatically initializes schemas on startup by mounting your SQL file
-      - ./migrations/000001_init.sql:/docker-entrypoint-initdb.d/000001_init.sql:ro
+      - ./internal/repository/migrations/000001_init.sql:/docker-entrypoint-initdb.d/000001_init.sql:ro
       # Persistent local named disk storage so data isn't lost when containers stop
       - pg-data-volume:/var/lib/postgresql/data
     restart: unless-stopped
