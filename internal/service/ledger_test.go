@@ -91,6 +91,9 @@ func TestLedgerService_ProcessReward(t *testing.T) {
 				m.GetMemberByIDFunc = func(ctx context.Context, id int) (*domain.Member, error) {
 					return &domain.Member{MemberID: 1}, nil
 				}
+				m.GetPointDetailsByPointTypeFunc = func(ctx context.Context, pointTypeID int) (*domain.Point, error) {
+					return &domain.Point{PointTypeID: domain.TypePurchaseEarning, IsActive: true}, nil
+				}
 				m.AddRewardEntryFunc = func(ctx context.Context, mID, ptID, pts int, desc string) (*domain.RewardEntry, error) {
 					return &domain.RewardEntry{RewardID: 101, Points: pts}, nil
 				}
@@ -106,6 +109,9 @@ func TestLedgerService_ProcessReward(t *testing.T) {
 			mockSetup: func(m *repository.MockRepository) {
 				m.GetMemberByIDFunc = func(ctx context.Context, id int) (*domain.Member, error) {
 					return &domain.Member{MemberID: 1}, nil
+				}
+				m.GetPointDetailsByPointTypeFunc = func(ctx context.Context, pointTypeID int) (*domain.Point, error) {
+					return &domain.Point{PointTypeID: domain.TypeRedemption, IsActive: true}, nil
 				}
 				m.GetBalanceFunc = func(ctx context.Context, memberID int) (int, error) {
 					return 100, nil // Sufficient balance available
@@ -126,6 +132,9 @@ func TestLedgerService_ProcessReward(t *testing.T) {
 				m.GetMemberByIDFunc = func(ctx context.Context, id int) (*domain.Member, error) {
 					return &domain.Member{MemberID: 1}, nil
 				}
+				m.GetPointDetailsByPointTypeFunc = func(ctx context.Context, pointTypeID int) (*domain.Point, error) {
+					return &domain.Point{PointTypeID: domain.TypeRedemption, IsActive: true}, nil
+				}
 				m.GetBalanceFunc = func(ctx context.Context, memberID int) (int, error) {
 					return 50, nil // 50 available < 200 requested = overdraft!
 				}
@@ -139,6 +148,9 @@ func TestLedgerService_ProcessReward(t *testing.T) {
 			points:      10,
 			description: "Points allocation to dark hole",
 			mockSetup: func(m *repository.MockRepository) {
+				m.GetPointDetailsByPointTypeFunc = func(ctx context.Context, pointTypeID int) (*domain.Point, error) {
+					return &domain.Point{PointTypeID: domain.TypePurchaseEarning, IsActive: true}, nil
+				}
 				m.GetMemberByIDFunc = func(ctx context.Context, id int) (*domain.Member, error) {
 					return nil, domain.ErrMemberNotFound
 				}
@@ -146,13 +158,30 @@ func TestLedgerService_ProcessReward(t *testing.T) {
 			expectedError: domain.ErrMemberNotFound,
 		},
 		{
-			name:          "Negative points amount validation rejection",
-			memberID:      1,
-			pointType:     domain.TypePurchaseEarning,
-			points:        -50,
-			description:   "Malformed request payload",
-			mockSetup:     func(m *repository.MockRepository) {},
+			name:        "Negative points amount validation rejection",
+			memberID:    1,
+			pointType:   domain.TypePurchaseEarning,
+			points:      -50,
+			description: "Malformed request payload",
+			mockSetup: func(m *repository.MockRepository) {
+				m.GetPointDetailsByPointTypeFunc = func(ctx context.Context, pointTypeID int) (*domain.Point, error) {
+					return &domain.Point{PointTypeID: domain.TypePurchaseEarning, IsActive: true}, nil
+				}
+			},
 			expectedError: domain.ErrPointsNotPositive, // <-- Matched to your models.go error variable
+		},
+		{
+			name:        "Invalid or inactive point type failure",
+			memberID:    1,
+			pointType:   999,
+			points:      50,
+			description: "Invalid point type",
+			mockSetup: func(m *repository.MockRepository) {
+				m.GetPointDetailsByPointTypeFunc = func(ctx context.Context, pointTypeID int) (*domain.Point, error) {
+					return nil, domain.ErrInvalidPointType
+				}
+			},
+			expectedError: domain.ErrInvalidPointType, // <-- Matched to your models.go error variable
 		},
 	}
 

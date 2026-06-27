@@ -77,9 +77,23 @@ reward-points-ledger/
 
 Make sure you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed on your machine.
 
+### 0. One time initialization (only first time)
+
+```bash
+make up-db
+make migrate-up
+make down
+```
+
 ### 1. Build and Launch the Full Stack
 
 Spin up the Go API backend, the PostgreSQL 16 database instance, and the Swagger UI documentation layer simultaneously:
+
+```bash
+make up
+```
+
+OR
 
 ```bash
 docker compose up --build

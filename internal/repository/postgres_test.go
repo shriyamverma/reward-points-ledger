@@ -92,7 +92,7 @@ func TestPostgresRepository_GetMemberByID_Success(t *testing.T) {
 	mockTime := time.Now().UTC()
 
 	mock.ExpectQuery(`SELECT member_id, name, email, created_at FROM members`).
-		WithArgs(pgx.NamedArgs{"id": memberID}).
+		WithArgs(pgx.NamedArgs{"member_id": memberID}).
 		WillReturnRows(pgxmock.NewRows([]string{"member_id", "name", "email", "created_at"}).
 			AddRow(memberID, "Bob Smith", "bob@example.com", mockTime))
 
@@ -120,7 +120,7 @@ func TestPostgresRepository_GetMemberByID_NotFound(t *testing.T) {
 	memberID := 999
 
 	mock.ExpectQuery(`SELECT member_id, name, email, created_at FROM members`).
-		WithArgs(pgx.NamedArgs{"id": memberID}).
+		WithArgs(pgx.NamedArgs{"member_id": memberID}).
 		WillReturnError(pgx.ErrNoRows)
 
 	_, err = repo.GetMemberByID(context.Background(), memberID)
