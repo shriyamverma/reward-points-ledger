@@ -7,7 +7,39 @@ servers:
     description: Local Go Ledger API Backend Server
 paths:
   /members:
+    get:
+      tags:
+        - member
+      summary: List all registered members
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    member_id:
+                      type: integer
+                      default: 1
+                      description: The member ID.
+                    name:
+                      type: string
+                      default: "Alice Johnson"
+                      description: The member name.
+                    email:
+                      type: string
+                      default: "alice@example.com"
+                      description: The member email.
+                    created_at:
+                      type: string
+                      default: "2026-06-03T19:19:59Z"
+                      description: ID creation time
     post:
+      tags:
+        - member
       summary: Create a new member account
       requestBody:
         required: true
@@ -15,7 +47,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, email]
+              required: [ name, email ]
               properties:
                 name: { type: string, example: "Alice Johnson" }
                 email: { type: string, example: "alice@example.com" }
@@ -26,6 +58,8 @@ paths:
           description: Email Already Registered
   /members/{memberId}:
     get:
+      tags:
+        - member
       summary: Get member info and balance
       parameters:
         - name: memberId
@@ -38,7 +72,16 @@ paths:
         '404':
           description: Member Not Found
   /rewards:
+    get:
+      tags:
+        - reward
+      summary: List all reward points in ledger entry
+      responses:
+        '200':
+          description: Success
     post:
+      tags:
+        - reward
       summary: Process a point transaction ledger entry
       requestBody:
         required: true
@@ -46,7 +89,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [member_id, point_type_id, points, description]
+              required: [ member_id, point_type_id, points, description ]
               properties:
                 member_id: { type: integer, example: 1 }
                 point_type_id: { type: integer, example: 1 }
@@ -59,6 +102,9 @@ paths:
           description: Insufficient Balance for redemption
   /members/{memberId}/rewards:
     get:
+      tags:
+        - reward
+        - member
       summary: Fetch tracking timeline for a specific account identity
       parameters:
         - name: memberId
@@ -68,3 +114,75 @@ paths:
       responses:
         '200':
           description: Success
+  /member/{memberId}/point-category:
+    get:
+      tags:
+        - points
+        - member
+      summary: Fetch each member's points by category
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Success
+
+  /points:
+    get:
+      tags:
+        - points
+      summary: List all points
+      responses:
+        200:
+          description: Success
+    post:
+      tags:
+        - points
+      summary: Create a point
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ point_type_id, point_code ]
+              properties:
+                point_type_id: { type: integer, example: 1 }
+                point_code: { type: string, example: "TypePurchaseEarning" }
+      responses:
+        '201':
+          description: Entry Logged
+  /points/{pointTypeId}:
+    get:
+      tags:
+        - points
+      summary: Get point details
+      parameters:
+        - name: pointTypeId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        200:
+          description: Success
+  /points/activate:
+    post:
+      tags:
+        - points
+      summary: Activate a point type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ point_type_id ]
+              properties:
+                point_type_id: { type: integer, example: 1 }
+      responses:
+        '200':
+          description: Point type activated
+        '204':
+          description: Point type already activate
