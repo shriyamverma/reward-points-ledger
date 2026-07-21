@@ -20,4 +20,5 @@ type Repository interface {
 	GetPointDetailsByPointType(ctx context.Context, pointTypeID int) (*domain.Point, error)
 	GetAllPoints(ctx context.Context) (*domain.Points, error)
 	ActivatePoint(context.Context, int) (*domain.Point, error)
+	DeactivatePoint(context.Context, int) (*domain.Point, error)
 }

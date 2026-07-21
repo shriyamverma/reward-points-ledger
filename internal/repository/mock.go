@@ -18,6 +18,7 @@ type MockRepository struct {
 	GetPointDetailsByPointTypeFunc func(ctx context.Context, pointTypeID int) (*domain.Point, error)
 	GetAllPointsFunc               func(ctx context.Context) (*domain.Points, error)
 	ActivatePointFunc              func(ctx context.Context, pointTypeID int) (*domain.Point, error)
+	DeactivatePointFunc            func(ctx context.Context, pointTypeID int) (*domain.Point, error)
 }
 
 func (m *MockRepository) CreateMember(ctx context.Context, name, email string) (*domain.Member, error) {
@@ -55,4 +56,7 @@ func (m *MockRepository) GetAllPoints(ctx context.Context) (*domain.Points, erro
 }
 func (m *MockRepository) ActivatePoint(ctx context.Context, pointTypeID int) (*domain.Point, error) {
 	return m.ActivatePointFunc(ctx, pointTypeID)
+}
+func (m *MockRepository) DeactivatePoint(ctx context.Context, pointTypeID int) (*domain.Point, error) {
+	return m.DeactivatePointFunc(ctx, pointTypeID)
 }

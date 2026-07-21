@@ -368,3 +368,25 @@ func (r *PostgresRepository) ActivatePoint(ctx context.Context, pointTypeID int)
 	point.CreatedAt = createdAt.Format(time.RFC3339)
 	return point, nil
 }
+
+func (r *PostgresRepository) DeactivatePoint(ctx context.Context, pointTypeID int) (*domain.Point, error) {
+	query := `UPDATE points SET is_active = false WHERE point_type_id = @point_type_id
+				RETURNING point_id, point_type_id, point_code, is_active, created_at`
+	args := pgx.NamedArgs{
+		"point_type_id": pointTypeID,
+	}
+
+	slog.Debug("executing database raw query", "op", "DeactivatePoint", "query", query, "args", args)
+
+	point := &domain.Point{}
+	var createdAt time.Time
+	err := r.pool.QueryRow(ctx, query, args).Scan(&point.PointID, &point.PointTypeID, &point.PointCode, &point.IsActive, &createdAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrPointNotFound
+		}
+		return nil, err
+	}
+	point.CreatedAt = createdAt.Format(time.RFC3339)
+	return point, nil
+}

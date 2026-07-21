@@ -100,3 +100,7 @@ func (s *LedgerService) GetAllPoints(ctx context.Context) (*domain.Points, error
 func (s *LedgerService) ActivatePoint(ctx context.Context, pointTypeID int) (*domain.Point, error) {
 	return s.repo.ActivatePoint(ctx, pointTypeID)
 }
+
+func (s *LedgerService) DeactivatePoint(ctx context.Context, pointTypeID int) (*domain.Point, error) {
+	return s.repo.DeactivatePoint(ctx, pointTypeID)
+}

@@ -279,3 +279,26 @@ func (h *HTTPHandler) ActivatePoint(w http.ResponseWriter, r *http.Request) {
 	}
 	respondWithJSON(w, http.StatusOK, &point)
 }
+
+func (h *HTTPHandler) DeactivatePoint(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var input struct {
+		PointTypeID int `json:"point_type_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondWithError(w, r, http.StatusBadRequest, "Invalid input.")
+		return
+	}
+
+	point, err := h.service.DeactivatePoint(ctx, input.PointTypeID)
+	if err != nil {
+		if errors.Is(err, domain.ErrPointNotFound) {
+			respondWithError(w, r, http.StatusNotFound, err.Error())
+			return
+		}
+		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, &point)
+}

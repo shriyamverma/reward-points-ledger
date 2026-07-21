@@ -59,6 +59,7 @@ func main() {
 	r.Get("/points/{pointTypeId}", h.GetPointDetailsByPointType)
 	r.Get("/points", h.GetAllPoints)
 	r.Post("/points/activate", h.ActivatePoint)
+	r.Post("/points/deactivate", h.DeactivatePoint)
 
 	slog.Info("Reward points ledger service running on port :8080...")
 	if err := http.ListenAndServe(":8080", r); err != nil {
