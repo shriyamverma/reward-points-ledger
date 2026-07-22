@@ -241,7 +241,11 @@ func TestPostgresRepository_AddRewardEntry_Success(t *testing.T) {
 	description := "Referral Credit"
 	mockTime := time.Now().UTC()
 
-	// Updated to verify that event_date comes back from native DB RETURNING engine
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT member_id FROM members WHERE member_id = @member_id FOR UPDATE`).
+		WithArgs(pgx.NamedArgs{"member_id": memberID}).
+		WillReturnRows(pgxmock.NewRows([]string{"member_id"}).AddRow(memberID))
+
 	mock.ExpectQuery(`INSERT INTO rewards`).
 		WithArgs(pgx.NamedArgs{
 			"member_id":     memberID,
@@ -250,6 +254,8 @@ func TestPostgresRepository_AddRewardEntry_Success(t *testing.T) {
 			"description":   description,
 		}).
 		WillReturnRows(pgxmock.NewRows([]string{"reward_id", "event_date"}).AddRow(999, mockTime))
+
+	mock.ExpectCommit()
 
 	entry, err := repo.AddRewardEntry(context.Background(), memberID, pointTypeID, points, description)
 	if err != nil {

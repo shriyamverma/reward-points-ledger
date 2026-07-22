@@ -19,6 +19,7 @@ type PostgreSQLPool interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
 type PostgresRepository struct {
@@ -98,8 +99,40 @@ func (r *PostgresRepository) GetMemberByID(ctx context.Context, memberID int) (*
 }
 
 func (r *PostgresRepository) AddRewardEntry(ctx context.Context, memberID, pointTypeID, points int, desc string) (*domain.RewardEntry, error) {
-	query := `INSERT INTO rewards (member_id, point_type_id, points, description, event_date) 
-              VALUES (@member_id, @point_type_id, @points, @description, NOW()) 
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	// 1. Lock the member row for update to ensure serialized execution
+	var dummy int
+	err = tx.QueryRow(ctx, "SELECT member_id FROM members WHERE member_id = @member_id FOR UPDATE", pgx.NamedArgs{"member_id": memberID}).Scan(&dummy)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrMemberNotFound
+		}
+		return nil, err
+	}
+
+	// 2. Perform double-spend validation if redemption
+	if points < 0 {
+		var balance int
+		err = tx.QueryRow(ctx, "SELECT COALESCE(SUM(points), 0) FROM rewards WHERE member_id = @member_id", pgx.NamedArgs{"member_id": memberID}).Scan(&balance)
+		if err != nil {
+			return nil, err
+		}
+		if balance+points < 0 {
+			return nil, domain.ErrInsufficientBalance
+		}
+	}
+
+	// 3. Atomically check if point type is active and insert the reward record
+	query := `INSERT INTO rewards (member_id, point_type_id, points, description, event_date)
+              SELECT @member_id, @point_type_id, @points, @description, NOW()
+              WHERE EXISTS (
+                  SELECT 1 FROM points WHERE point_type_id = @point_type_id AND is_active = true
+              )
               RETURNING reward_id, event_date`
 
 	args := pgx.NamedArgs{
@@ -112,8 +145,15 @@ func (r *PostgresRepository) AddRewardEntry(ctx context.Context, memberID, point
 
 	var rewardID int
 	var dbEventDate time.Time
-	err := r.pool.QueryRow(ctx, query, args).Scan(&rewardID, &dbEventDate)
+	err = tx.QueryRow(ctx, query, args).Scan(&rewardID, &dbEventDate)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrInvalidPointType
+		}
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 
