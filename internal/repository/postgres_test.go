@@ -152,11 +152,11 @@ func TestPostgresRepository_GetRewardsByMemberID_Success(t *testing.T) {
 		AddRow(101, memberID, 1, 100, "Sign-up Bonus", mockTime).
 		AddRow(102, memberID, 4, -50, "Coffee Purchase", mockTime)
 
-	mock.ExpectQuery(`SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards`).
-		WithArgs(pgx.NamedArgs{"member_id": memberID}).
+	mock.ExpectQuery(`SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards WHERE member_id = @member_id ORDER BY reward_id DESC LIMIT @limit`).
+		WithArgs(pgx.NamedArgs{"member_id": memberID, "limit": 10}).
 		WillReturnRows(rows)
 
-	rewards, err := repo.GetRewardsByMemberID(context.Background(), memberID)
+	rewards, err := repo.GetRewardsByMemberID(context.Background(), memberID, 10, 0)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -183,11 +183,11 @@ func TestPostgresRepository_GetRewardsByMemberID_EmptyList(t *testing.T) {
 	memberID := 2
 
 	rows := pgxmock.NewRows([]string{"reward_id", "member_id", "point_type_id", "points", "description", "event_date"})
-	mock.ExpectQuery(`SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards`).
-		WithArgs(pgx.NamedArgs{"member_id": memberID}).
+	mock.ExpectQuery(`SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards WHERE member_id = @member_id ORDER BY reward_id DESC LIMIT @limit`).
+		WithArgs(pgx.NamedArgs{"member_id": memberID, "limit": 10}).
 		WillReturnRows(rows)
 
-	rewards, err := repo.GetRewardsByMemberID(context.Background(), memberID)
+	rewards, err := repo.GetRewardsByMemberID(context.Background(), memberID, 10, 0)
 	if err != nil {
 		t.Errorf("Expected zero runtime error on empty user ledger search, got: %v", err)
 	}
@@ -241,7 +241,11 @@ func TestPostgresRepository_AddRewardEntry_Success(t *testing.T) {
 	description := "Referral Credit"
 	mockTime := time.Now().UTC()
 
-	// Updated to verify that event_date comes back from native DB RETURNING engine
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT member_id FROM members WHERE member_id = @member_id FOR UPDATE`).
+		WithArgs(pgx.NamedArgs{"member_id": memberID}).
+		WillReturnRows(pgxmock.NewRows([]string{"member_id"}).AddRow(memberID))
+
 	mock.ExpectQuery(`INSERT INTO rewards`).
 		WithArgs(pgx.NamedArgs{
 			"member_id":     memberID,
@@ -250,6 +254,8 @@ func TestPostgresRepository_AddRewardEntry_Success(t *testing.T) {
 			"description":   description,
 		}).
 		WillReturnRows(pgxmock.NewRows([]string{"reward_id", "event_date"}).AddRow(999, mockTime))
+
+	mock.ExpectCommit()
 
 	entry, err := repo.AddRewardEntry(context.Background(), memberID, pointTypeID, points, description)
 	if err != nil {

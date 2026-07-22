@@ -63,14 +63,22 @@ func (r *MemoryRepository) GetMemberByID(ctx context.Context, id int) (*domain.M
 	}, nil
 }
 
-func (r *MemoryRepository) GetRewardsByMemberID(ctx context.Context, id int) ([]domain.RewardEntry, error) {
+func (r *MemoryRepository) GetRewardsByMemberID(ctx context.Context, id int, limit, cursorID int) ([]domain.RewardEntry, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	var result []domain.RewardEntry
-	for _, rw := range r.rewards {
+	// Loop backwards to achieve DESC order
+	for i := len(r.rewards) - 1; i >= 0; i-- {
+		rw := r.rewards[i]
 		if rw.MemberID == id {
+			if cursorID > 0 && rw.RewardID >= cursorID {
+				continue
+			}
 			result = append(result, rw)
+			if len(result) == limit {
+				break
+			}
 		}
 	}
 	return result, nil

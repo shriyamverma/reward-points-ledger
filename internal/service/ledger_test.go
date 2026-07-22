@@ -168,7 +168,7 @@ func TestLedgerService_ProcessReward(t *testing.T) {
 					return &domain.Point{PointTypeID: domain.TypePurchaseEarning, IsActive: true}, nil
 				}
 			},
-			expectedError: domain.ErrPointsNotPositive, // <-- Matched to your models.go error variable
+			expectedError: domain.ErrPointsNotPositive,
 		},
 		{
 			name:        "Invalid or inactive point type failure",
@@ -181,7 +181,7 @@ func TestLedgerService_ProcessReward(t *testing.T) {
 					return nil, domain.ErrInvalidPointType
 				}
 			},
-			expectedError: domain.ErrInvalidPointType, // <-- Matched to your models.go error variable
+			expectedError: domain.ErrInvalidPointType,
 		},
 	}
 
@@ -218,7 +218,7 @@ func TestLedgerService_GetMember(t *testing.T) {
 			return 420, nil
 		}
 
-		member, err := service.GetMember(context.Background(), 7)
+		member, err := service.GetMemberByID(context.Background(), 7)
 		if err != nil {
 			t.Fatalf("Expected clean hydration, got error: %v", err)
 		}

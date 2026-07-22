@@ -11,6 +11,21 @@ paths:
       tags:
         - member
       summary: List all registered members
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Max number of members to return
+          schema:
+            type: integer
+            default: 10
+        - name: offset
+          in: query
+          required: false
+          description: Number of members to skip
+          schema:
+            type: integer
+            default: 0
       responses:
         '200':
           description: Success
@@ -71,11 +86,68 @@ paths:
           description: Success
         '404':
           description: Member Not Found
+
+  /members/{memberId}/rewards:
+    get:
+      tags:
+        - member
+      summary: Fetch all reward entries for a specific member
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: limit
+          in: query
+          required: false
+          description: Max number of rewards to return
+          schema:
+            type: integer
+            default: 10
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor ID (reward_id) to retrieve records older than this cursor
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Success
+  /member/{memberId}/point-category:
+    get:
+      tags:
+        - member
+      summary: Fetch each member's points by category
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Success
+
   /rewards:
     get:
       tags:
         - reward
       summary: List all reward points in ledger entry
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Max number of rewards to return
+          schema:
+            type: integer
+            default: 10
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor ID (reward_id) to retrieve records newer than this cursor
+          schema:
+            type: integer
+            default: 0
       responses:
         '200':
           description: Success
@@ -100,47 +172,19 @@ paths:
           description: Entry Logged
         '422':
           description: Insufficient Balance for redemption
-  /members/{memberId}/rewards:
-    get:
-      tags:
-        - reward
-        - member
-      summary: Fetch tracking timeline for a specific account identity
-      parameters:
-        - name: memberId
-          in: path
-          required: true
-          schema: { type: integer }
-      responses:
-        '200':
-          description: Success
-  /member/{memberId}/point-category:
-    get:
-      tags:
-        - points
-        - member
-      summary: Fetch each member's points by category
-      parameters:
-        - name: memberId
-          in: path
-          required: true
-          schema: { type: integer }
-      responses:
-        '200':
-          description: Success
 
   /points:
     get:
       tags:
         - points
-      summary: List all points
+      summary: List all point types
       responses:
         200:
           description: Success
     post:
       tags:
         - points
-      summary: Create a point
+      summary: Create a new point type
       requestBody:
         required: true
         content:
@@ -154,19 +198,19 @@ paths:
       responses:
         '201':
           description: Entry Logged
-  /points/{pointTypeId}:
-    get:
-      tags:
-        - points
-      summary: Get point details
-      parameters:
-        - name: pointTypeId
-          in: path
-          required: true
-          schema: { type: integer }
-      responses:
-        200:
-          description: Success
+#  /points/{pointTypeId}:
+#    get:
+#      tags:
+#        - points
+#      summary: Get point details
+#      parameters:
+#        - name: pointTypeId
+#          in: path
+#          required: true
+#          schema: { type: integer }
+#      responses:
+#        200:
+#          description: Success
   /points/activate:
     post:
       tags:
@@ -184,5 +228,20 @@ paths:
       responses:
         '200':
           description: Point type activated
-        '204':
-          description: Point type already activate
+  /points/deactivate:
+    post:
+      tags:
+        - points
+      summary: Deactivate a point type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ point_type_id ]
+              properties:
+                point_type_id: { type: integer, example: 1 }
+      responses:
+        '200':
+          description: Point type deactivated

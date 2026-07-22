@@ -55,11 +55,13 @@ type RewardEntry struct {
 	EventDate   string `json:"event_date"`
 }
 
-type MemberWithPointCategory struct {
-	MemberID        int `json:"member_id"`
-	PurchaseEarning int `json:"purchase_earning"`
-	ReferralBonus   int `json:"referral_bonus"`
-	Cashback        int `json:"cashback"`
-	Redemption      int `json:"redemption"`
-	PointsBalance   int `json:"points_balance"`
+type CategoryBalance struct {
+	PointTypeID int `json:"point_type_id"`
+	Balance     int `json:"balance"`
+}
+
+type MemberPointSummary struct {
+	MemberID      int               `json:"member_id"`
+	Categories    []CategoryBalance `json:"categories"`
+	PointsBalance int               `json:"points_balance"`
 }

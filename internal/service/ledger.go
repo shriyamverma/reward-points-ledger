@@ -14,11 +14,16 @@ func NewLedgerService(repo repository.Repository) *LedgerService {
 	return &LedgerService{repo: repo}
 }
 
+func (s *LedgerService) requireMember(ctx context.Context, memberID int) error {
+	_, err := s.repo.GetMemberByID(ctx, memberID)
+	return err
+}
+
 func (s *LedgerService) CreateMember(ctx context.Context, name, email string) (*domain.Member, error) {
 	return s.repo.CreateMember(ctx, name, email)
 }
 
-func (s *LedgerService) GetMember(ctx context.Context, id int) (*domain.Member, error) {
+func (s *LedgerService) GetMemberByID(ctx context.Context, id int) (*domain.Member, error) {
 	member, err := s.repo.GetMemberByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -31,12 +36,11 @@ func (s *LedgerService) GetMember(ctx context.Context, id int) (*domain.Member, 
 	return member, nil
 }
 
-func (s *LedgerService) GetRewards(ctx context.Context, memberID int) ([]domain.RewardEntry, error) {
-	// Verify user profile exists first
-	if _, err := s.repo.GetMemberByID(ctx, memberID); err != nil {
+func (s *LedgerService) GetRewardsByMemberID(ctx context.Context, memberID int, limit, cursorID int) ([]domain.RewardEntry, error) {
+	if err := s.requireMember(ctx, memberID); err != nil {
 		return nil, err
 	}
-	return s.repo.GetRewardsByMemberID(ctx, memberID)
+	return s.repo.GetRewardsByMemberID(ctx, memberID, limit, cursorID)
 }
 
 func (s *LedgerService) ProcessReward(ctx context.Context, memberID, pointTypeID, points int, desc string) (*domain.RewardEntry, error) {
@@ -48,8 +52,7 @@ func (s *LedgerService) ProcessReward(ctx context.Context, memberID, pointTypeID
 		return nil, domain.ErrPointsNotPositive
 	}
 
-	// Verify target identity exists
-	if _, err := s.repo.GetMemberByID(ctx, memberID); err != nil {
+	if err := s.requireMember(ctx, memberID); err != nil {
 		return nil, err
 	}
 
@@ -69,20 +72,19 @@ func (s *LedgerService) ProcessReward(ctx context.Context, memberID, pointTypeID
 	return s.repo.AddRewardEntry(ctx, memberID, pointTypeID, calculatedPoints, desc)
 }
 
-func (s *LedgerService) GetAllMembers(ctx context.Context) ([]domain.Member, error) {
-	return s.repo.GetMembers(ctx)
+func (s *LedgerService) GetAllMembers(ctx context.Context, limit, offset int) ([]domain.Member, error) {
+	return s.repo.GetAllMembers(ctx, limit, offset)
 }
 
-func (s *LedgerService) GetAllRewards(ctx context.Context) ([]domain.RewardEntry, error) {
-	return s.repo.GetRewards(ctx)
+func (s *LedgerService) GetAllRewards(ctx context.Context, limit, cursorID int) ([]domain.RewardEntry, error) {
+	return s.repo.GetAllRewards(ctx, limit, cursorID)
 }
 
-func (s *LedgerService) GetMemberWithPointCategory(ctx context.Context, memberID int) (*domain.MemberWithPointCategory, error) {
-	// Verify target identity exists
-	if _, err := s.repo.GetMemberByID(ctx, memberID); err != nil {
+func (s *LedgerService) GetMemberPointSummary(ctx context.Context, memberID int) (*domain.MemberPointSummary, error) {
+	if err := s.requireMember(ctx, memberID); err != nil {
 		return nil, err
 	}
-	return s.repo.GetMemberWithPointCategory(ctx, memberID)
+	return s.repo.GetMemberPointSummary(ctx, memberID)
 }
 
 func (s *LedgerService) CreatePoint(ctx context.Context, pointTypeID int, pointCode string) (*domain.Point, error) {
@@ -97,6 +99,6 @@ func (s *LedgerService) GetAllPoints(ctx context.Context) (*domain.Points, error
 	return s.repo.GetAllPoints(ctx)
 }
 
-func (s *LedgerService) ActivatePoint(ctx context.Context, pointTypeID int) (*domain.Point, error) {
-	return s.repo.ActivatePoint(ctx, pointTypeID)
+func (s *LedgerService) SetPointActive(ctx context.Context, pointTypeID int, active bool) (*domain.Point, error) {
+	return s.repo.SetPointActive(ctx, pointTypeID, active)
 }

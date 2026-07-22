@@ -2,14 +2,14 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"log/slog"
 	"net/http"
 	"reward-points-ledger/internal/domain"
 	"reward-points-ledger/internal/service"
 	"strconv"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 type HTTPHandler struct {
@@ -20,7 +20,6 @@ func NewHTTPHandler(service *service.LedgerService) *HTTPHandler {
 	return &HTTPHandler{service: service}
 }
 
-// ErrorResponse structural blueprint
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
@@ -50,6 +49,18 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	json.NewEncoder(w).Encode(payload)
 }
 
+func respondWithServiceError(w http.ResponseWriter, r *http.Request, err error) {
+	if status, msg, ok := domain.HTTPStatus(err); ok {
+		respondWithError(w, r, status, msg)
+		return
+	}
+	respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
+}
+
+func decodeJSON(r *http.Request, dst any) error {
+	return json.NewDecoder(r.Body).Decode(dst)
+}
+
 func (h *HTTPHandler) CreateMember(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -57,24 +68,20 @@ func (h *HTTPHandler) CreateMember(w http.ResponseWriter, r *http.Request) {
 		Name  string `json:"name"`
 		Email string `json:"email"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Name == "" || input.Email == "" {
+	if err := decodeJSON(r, &input); err != nil || input.Name == "" || input.Email == "" {
 		respondWithError(w, r, http.StatusBadRequest, "Invalid input. Name and email are required.")
 		return
 	}
 
 	m, err := h.service.CreateMember(ctx, input.Name, input.Email)
 	if err != nil {
-		if errors.Is(err, domain.ErrDuplicateEmail) {
-			respondWithError(w, r, http.StatusConflict, err.Error())
-			return
-		}
-		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
+		respondWithServiceError(w, r, err)
 		return
 	}
 	respondWithJSON(w, http.StatusCreated, m)
 }
 
-func (h *HTTPHandler) GetMember(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPHandler) GetMemberByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	idStr := chi.URLParam(r, "memberId")
@@ -84,13 +91,9 @@ func (h *HTTPHandler) GetMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, err := h.service.GetMember(ctx, id)
+	m, err := h.service.GetMemberByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, domain.ErrMemberNotFound) {
-			respondWithError(w, r, http.StatusNotFound, err.Error())
-			return
-		}
-		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
+		respondWithServiceError(w, r, err)
 		return
 	}
 	respondWithJSON(w, http.StatusOK, m)
@@ -105,29 +108,20 @@ func (h *HTTPHandler) CreateReward(w http.ResponseWriter, r *http.Request) {
 		Points      int    `json:"points"`
 		Description string `json:"description"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	if err := decodeJSON(r, &input); err != nil {
 		respondWithError(w, r, http.StatusBadRequest, "Malformed JSON request body")
 		return
 	}
 
 	rw, err := h.service.ProcessReward(ctx, input.MemberID, input.PointTypeID, input.Points, input.Description)
 	if err != nil {
-		switch {
-		case errors.Is(err, domain.ErrMemberNotFound):
-			respondWithError(w, r, http.StatusNotFound, err.Error())
-		case errors.Is(err, domain.ErrInvalidPointType), errors.Is(err, domain.ErrPointsNotPositive):
-			respondWithError(w, r, http.StatusBadRequest, err.Error())
-		case errors.Is(err, domain.ErrInsufficientBalance):
-			respondWithError(w, r, http.StatusUnprocessableEntity, err.Error())
-		default:
-			respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
-		}
+		respondWithServiceError(w, r, err)
 		return
 	}
 	respondWithJSON(w, http.StatusCreated, rw)
 }
 
-func (h *HTTPHandler) GetMemberRewards(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPHandler) GetRewardsByMemberID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	idStr := chi.URLParam(r, "memberId")
@@ -137,17 +131,29 @@ func (h *HTTPHandler) GetMemberRewards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries, err := h.service.GetRewards(ctx, id)
-	if err != nil {
-		if errors.Is(err, domain.ErrMemberNotFound) {
-			respondWithError(w, r, http.StatusNotFound, err.Error())
-			return
+	limit := 10
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
 		}
-		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	cursorID := 0
+	if cursorStr := r.URL.Query().Get("cursor"); cursorStr != "" {
+		if c, err := strconv.Atoi(cursorStr); err == nil && c >= 0 {
+			cursorID = c
+		}
+	}
+
+	entries, err := h.service.GetRewardsByMemberID(ctx, id, limit, cursorID)
+	if err != nil {
+		respondWithServiceError(w, r, err)
 		return
 	}
 
-	// If entries is nil, return empty JSON array [] instead of null
 	if entries == nil {
 		entries = []domain.RewardEntry{}
 	}
@@ -157,22 +163,56 @@ func (h *HTTPHandler) GetMemberRewards(w http.ResponseWriter, r *http.Request) {
 func (h *HTTPHandler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	members, err := h.service.GetAllMembers(ctx)
-	if err != nil {
-		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
+	limit := 10
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+	if limit > 100 {
+		limit = 100
 	}
 
+	offset := 0
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
+	members, err := h.service.GetAllMembers(ctx, limit, offset)
+	if err != nil {
+		respondWithServiceError(w, r, err)
+		return
+	}
 	respondWithJSON(w, http.StatusOK, members)
 }
 
 func (h *HTTPHandler) GetAllRewards(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	rewards, err := h.service.GetAllRewards(ctx)
-	if err != nil {
-		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
+	limit := 10
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+	if limit > 100 {
+		limit = 100
 	}
 
+	cursorID := 0
+	if cursorStr := r.URL.Query().Get("cursor"); cursorStr != "" {
+		if c, err := strconv.Atoi(cursorStr); err == nil && c >= 0 {
+			cursorID = c
+		}
+	}
+
+	rewards, err := h.service.GetAllRewards(ctx, limit, cursorID)
+	if err != nil {
+		respondWithServiceError(w, r, err)
+		return
+	}
 	respondWithJSON(w, http.StatusOK, rewards)
 }
 
@@ -182,19 +222,12 @@ func (h *HTTPHandler) GetMemberWithPointCategory(w http.ResponseWriter, r *http.
 	memberId, err := strconv.Atoi(chi.URLParam(r, "memberId"))
 	if err != nil {
 		respondWithError(w, r, http.StatusBadRequest, "Invalid member ID format")
+		return
 	}
 
-	memberWithPointCategory, err := h.service.GetMemberWithPointCategory(ctx, memberId)
+	memberWithPointCategory, err := h.service.GetMemberPointSummary(ctx, memberId)
 	if err != nil {
-		if errors.Is(err, domain.ErrMemberNotFound) {
-			respondWithError(w, r, http.StatusNotFound, err.Error())
-			return
-		}
-		if errors.Is(err, domain.ErrRewardNotFound) {
-			respondWithError(w, r, http.StatusNotFound, err.Error())
-			return
-		}
-		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
+		respondWithServiceError(w, r, err)
 		return
 	}
 
@@ -208,21 +241,17 @@ func (h *HTTPHandler) CreatePoint(w http.ResponseWriter, r *http.Request) {
 		PointTypeID int    `json:"point_type_id"`
 		PointCode   string `json:"point_code"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.PointTypeID < 1 || input.PointCode == "" {
+	if err := decodeJSON(r, &input); err != nil || input.PointTypeID < 1 || input.PointCode == "" {
 		respondWithError(w, r, http.StatusBadRequest, "Invalid input.")
 		return
 	}
 
-	m, err := h.service.CreatePoint(ctx, input.PointTypeID, input.PointCode)
+	point, err := h.service.CreatePoint(ctx, input.PointTypeID, input.PointCode)
 	if err != nil {
-		if errors.Is(err, domain.ErrDuplicatePointTypeID) {
-			respondWithError(w, r, http.StatusConflict, err.Error())
-			return
-		}
-		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
+		respondWithServiceError(w, r, err)
 		return
 	}
-	respondWithJSON(w, http.StatusCreated, m)
+	respondWithJSON(w, http.StatusCreated, point)
 }
 
 func (h *HTTPHandler) GetPointDetailsByPointType(w http.ResponseWriter, r *http.Request) {
@@ -236,11 +265,7 @@ func (h *HTTPHandler) GetPointDetailsByPointType(w http.ResponseWriter, r *http.
 
 	point, err := h.service.GetPointDetailsByPointType(ctx, id)
 	if err != nil {
-		if errors.Is(err, domain.ErrPointNotFound) {
-			respondWithError(w, r, http.StatusNotFound, err.Error())
-			return
-		}
-		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
+		respondWithServiceError(w, r, err)
 		return
 	}
 	respondWithJSON(w, http.StatusOK, point)
@@ -251,31 +276,35 @@ func (h *HTTPHandler) GetAllPoints(w http.ResponseWriter, r *http.Request) {
 
 	points, err := h.service.GetAllPoints(ctx)
 	if err != nil {
-		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
+		respondWithServiceError(w, r, err)
 		return
 	}
 	respondWithJSON(w, http.StatusOK, &points)
 }
 
-func (h *HTTPHandler) ActivatePoint(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPHandler) setPointActive(w http.ResponseWriter, r *http.Request, active bool) {
 	ctx := r.Context()
 
 	var input struct {
 		PointTypeID int `json:"point_type_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	if err := decodeJSON(r, &input); err != nil {
 		respondWithError(w, r, http.StatusBadRequest, "Invalid input.")
 		return
 	}
 
-	point, err := h.service.ActivatePoint(ctx, input.PointTypeID)
+	point, err := h.service.SetPointActive(ctx, input.PointTypeID, active)
 	if err != nil {
-		if errors.Is(err, domain.ErrPointNotFound) {
-			respondWithError(w, r, http.StatusNotFound, err.Error())
-			return
-		}
-		respondWithError(w, r, http.StatusInternalServerError, "Internal server error")
+		respondWithServiceError(w, r, err)
 		return
 	}
 	respondWithJSON(w, http.StatusOK, &point)
+}
+
+func (h *HTTPHandler) ActivatePoint(w http.ResponseWriter, r *http.Request) {
+	h.setPointActive(w, r, true)
+}
+
+func (h *HTTPHandler) DeactivatePoint(w http.ResponseWriter, r *http.Request) {
+	h.setPointActive(w, r, false)
 }
