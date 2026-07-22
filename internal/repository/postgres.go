@@ -3,14 +3,16 @@ package repository
 import (
 	"context"
 	"errors"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/jackc/pgx/v5/pgconn"
 	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"reward-points-ledger/internal/domain"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type PostgreSQLPool interface {
@@ -27,10 +29,18 @@ func NewPostgresRepository(pool PostgreSQLPool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
+func (r *PostgresRepository) logQuery(ctx context.Context, op, query string, args pgx.NamedArgs) {
+	slog.Debug("executing database raw query",
+		"request_id", middleware.GetReqID(ctx),
+		"op", op,
+		"query", query,
+		"args", args,
+	)
+}
+
 func (r *PostgresRepository) CreateMember(ctx context.Context, name, email string) (*domain.Member, error) {
 	cleanEmail := strings.ToLower(strings.TrimSpace(email))
 
-	// Let Postgres handle NOW() inside the CTE layer
 	query := `
        WITH new_member AS (
           SELECT @name AS name, @email AS email, NOW() AS created_at
@@ -48,8 +58,7 @@ func (r *PostgresRepository) CreateMember(ctx context.Context, name, email strin
 		"name":  name,
 		"email": cleanEmail,
 	}
-	reqID := middleware.GetReqID(ctx)
-	slog.Debug("executing database raw query", "request_id", reqID, "op", "CreateMember", "query", query, "args", args)
+	r.logQuery(ctx, "CreateMember", query, args)
 
 	var memberID int
 	var dbCreatedAt time.Time
@@ -73,8 +82,7 @@ func (r *PostgresRepository) GetMemberByID(ctx context.Context, memberID int) (*
 	query := `SELECT member_id, name, email, created_at FROM members WHERE member_id = @member_id`
 
 	args := pgx.NamedArgs{"member_id": memberID}
-	reqID := middleware.GetReqID(ctx)
-	slog.Debug("executing database raw query", "request_id", reqID, "op", "GetMemberByID", "query", query, "args", args)
+	r.logQuery(ctx, "GetMemberByID", query, args)
 
 	var m domain.Member
 	var createdAtTime time.Time
@@ -90,7 +98,6 @@ func (r *PostgresRepository) GetMemberByID(ctx context.Context, memberID int) (*
 }
 
 func (r *PostgresRepository) AddRewardEntry(ctx context.Context, memberID, pointTypeID, points int, desc string) (*domain.RewardEntry, error) {
-	// Uniformly updated to use NOW() on insert and scan it right back out
 	query := `INSERT INTO rewards (member_id, point_type_id, points, description, event_date) 
               VALUES (@member_id, @point_type_id, @points, @description, NOW()) 
               RETURNING reward_id, event_date`
@@ -101,8 +108,7 @@ func (r *PostgresRepository) AddRewardEntry(ctx context.Context, memberID, point
 		"points":        points,
 		"description":   desc,
 	}
-	reqID := middleware.GetReqID(ctx)
-	slog.Debug("executing database raw query", "request_id", reqID, "op", "AddRewardEntry", "query", query, "args", args)
+	r.logQuery(ctx, "AddRewardEntry", query, args)
 
 	var rewardID int
 	var dbEventDate time.Time
@@ -128,11 +134,10 @@ func (r *PostgresRepository) AddRewardEntry(ctx context.Context, memberID, point
 }
 
 func (r *PostgresRepository) GetRewardsByMemberID(ctx context.Context, id int) ([]domain.RewardEntry, error) {
-	query := `SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards WHERE member_id = @member_id`
+	query := `SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards WHERE member_id = @member_id ORDER BY event_date DESC`
 
 	args := pgx.NamedArgs{"member_id": id}
-	reqID := middleware.GetReqID(ctx)
-	slog.Debug("executing database raw query", "request_id", reqID, "op", "GetRewardsByMemberID", "query", query, "args", args)
+	r.logQuery(ctx, "GetRewardsByMemberID", query, args)
 
 	rows, err := r.pool.Query(ctx, query, args)
 	if err != nil {
@@ -157,47 +162,43 @@ func (r *PostgresRepository) GetBalance(ctx context.Context, memberID int) (int,
 	query := `SELECT COALESCE(SUM(points), 0) FROM rewards WHERE member_id = @member_id`
 
 	args := pgx.NamedArgs{"member_id": memberID}
-	// Trace the exact SQL footprint
-	reqID := middleware.GetReqID(ctx)
-	slog.Debug("executing database raw query", "request_id", reqID, "op", "GetBalance", "query", query, "args", args)
+	r.logQuery(ctx, "GetBalance", query, args)
 
 	var balance int
 	err := r.pool.QueryRow(ctx, query, args).Scan(&balance)
 	return balance, err
 }
 
-func (r *PostgresRepository) GetMembers(ctx context.Context) ([]domain.Member, error) {
-	query := `SELECT member_id, name, email, created_at FROM members`
+func (r *PostgresRepository) GetAllMembers(ctx context.Context) ([]domain.Member, error) {
+	query := `SELECT member_id, name, email, created_at FROM members ORDER BY member_id`
 
 	args := pgx.NamedArgs{}
-	reqID := middleware.GetReqID(ctx)
-	slog.Debug("executing database raw query", "request_id", reqID, "op", "GetMemberByID", "query", query, "args", args)
+	r.logQuery(ctx, "GetAllMembers", query, args)
 
-	var allMembers []domain.Member
 	rows, err := r.pool.Query(ctx, query, args)
-	defer rows.Close()
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
+
+	var allMembers []domain.Member
 	for rows.Next() {
 		var member domain.Member
 		var createdAtTime time.Time
-		rows.Scan(&member.MemberID, &member.Name, &member.Email, &createdAtTime)
+		if err := rows.Scan(&member.MemberID, &member.Name, &member.Email, &createdAtTime); err != nil {
+			return nil, err
+		}
 		member.CreatedAt = createdAtTime.Format(time.RFC3339)
 		allMembers = append(allMembers, member)
 	}
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-	return allMembers, nil
+	return allMembers, rows.Err()
 }
 
-func (r *PostgresRepository) GetRewards(ctx context.Context) ([]domain.RewardEntry, error) {
-	query := `SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards`
+func (r *PostgresRepository) GetAllRewards(ctx context.Context) ([]domain.RewardEntry, error) {
+	query := `SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards ORDER BY event_date`
 
 	args := pgx.NamedArgs{}
-	reqID := middleware.GetReqID(ctx)
-	slog.Debug("executing database raw query", "request_id", reqID, "op", "GetRewardsByMemberID", "query", query, "args", args)
+	r.logQuery(ctx, "GetAllRewards", query, args)
 
 	rows, err := r.pool.Query(ctx, query, args)
 	if err != nil {
@@ -218,16 +219,13 @@ func (r *PostgresRepository) GetRewards(ctx context.Context) ([]domain.RewardEnt
 	return results, nil
 }
 
-func (r *PostgresRepository) GetMemberWithPointCategory(ctx context.Context, id int) (*domain.MemberWithPointCategory, error) {
-	query := `SELECT point_type_id, COALESCE(SUM(points), 0) FROM rewards WHERE member_id = @member_id GROUP BY point_type_id`
+func (r *PostgresRepository) GetMemberPointSummary(ctx context.Context, id int) (*domain.MemberPointSummary, error) {
+	query := `SELECT point_type_id, COALESCE(SUM(points), 0) FROM rewards WHERE member_id = @member_id GROUP BY point_type_id ORDER BY point_type_id`
 
 	args := pgx.NamedArgs{"member_id": id}
-	reqID := middleware.GetReqID(ctx)
-	slog.Debug("executing database raw query", "request_id", reqID, "op", "GetMemberWithPointCategory", "query", query, "args", args)
+	r.logQuery(ctx, "GetMemberPointSummary", query, args)
 
-	member := domain.MemberWithPointCategory{
-		MemberID: id,
-	}
+	summary := &domain.MemberPointSummary{MemberID: id}
 
 	rows, err := r.pool.Query(ctx, query, args)
 	if err != nil {
@@ -235,40 +233,23 @@ func (r *PostgresRepository) GetMemberWithPointCategory(ctx context.Context, id 
 	}
 	defer rows.Close()
 
-	hasRows := false
-
 	for rows.Next() {
-		hasRows = true
-
-		var pointType int
-		sum := 0
-		err := rows.Scan(&pointType, &sum)
-		if err != nil {
+		var category domain.CategoryBalance
+		if err := rows.Scan(&category.PointTypeID, &category.Balance); err != nil {
 			return nil, err
 		}
-
-		switch pointType {
-		case domain.TypePurchaseEarning:
-			member.PurchaseEarning = sum
-		case domain.TypeReferralBonus:
-			member.ReferralBonus = sum
-		case domain.TypeCashback:
-			member.Cashback = sum
-		case domain.TypeRedemption:
-			member.Redemption = sum
-		}
+		summary.Categories = append(summary.Categories, category)
+		summary.PointsBalance += category.Balance
 	}
-	if err = rows.Err(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	if !hasRows {
+	if len(summary.Categories) == 0 {
 		return nil, domain.ErrRewardNotFound
 	}
 
-	member.PointsBalance = member.PurchaseEarning + member.ReferralBonus + member.Cashback + member.Redemption
-
-	return &member, nil
+	return summary, nil
 }
 
 func (r *PostgresRepository) CreatePoints(ctx context.Context, pointTypeID int, pointCode string) (*domain.Point, error) {
@@ -276,22 +257,21 @@ func (r *PostgresRepository) CreatePoints(ctx context.Context, pointTypeID int, 
 				RETURNING point_id, is_active, created_at`
 
 	args := pgx.NamedArgs{
-		"point_type_id": pointTypeID, "point_code": pointCode,
+		"point_type_id": pointTypeID,
+		"point_code":    pointCode,
 	}
-	slog.Debug("executing database raw query", "op", "CreatePoints", "query", query, "args", args)
+	r.logQuery(ctx, "CreatePoints", query, args)
 
-	point := &domain.Point{}
+	point := &domain.Point{PointTypeID: pointTypeID, PointCode: pointCode}
 	var createdAt time.Time
 	err := r.pool.QueryRow(ctx, query, args).Scan(&point.PointID, &point.IsActive, &createdAt)
 	if err != nil {
-		slog.Debug("failed to insert point", "op", "CreatePoints", "query", query, "args", args)
-		if strings.ContainsAny(err.Error(), "already exists") {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return nil, domain.ErrDuplicatePointTypeID
 		}
 		return nil, err
 	}
-	point.PointTypeID = pointTypeID
-	point.PointCode = pointCode
 	point.CreatedAt = createdAt.Format(time.RFC3339)
 	return point, nil
 }
@@ -300,7 +280,7 @@ func (r *PostgresRepository) GetPointDetailsByPointType(ctx context.Context, poi
 	query := `SELECT point_id, point_type_id, point_code, is_active, created_at FROM points WHERE point_type_id = @point_type_id`
 
 	args := pgx.NamedArgs{"point_type_id": pointTypeID}
-	slog.Debug("executing database raw query", "op", "GetPointDetailsByPointType", "query", query, "args", args)
+	r.logQuery(ctx, "GetPointDetailsByPointType", query, args)
 
 	point := &domain.Point{}
 	var createdAt time.Time
@@ -313,11 +293,10 @@ func (r *PostgresRepository) GetPointDetailsByPointType(ctx context.Context, poi
 }
 
 func (r *PostgresRepository) GetAllPoints(ctx context.Context) (*domain.Points, error) {
-	query := `SELECT point_id, point_type_id, point_code, is_active, created_at FROM points`
+	query := `SELECT point_id, point_type_id, point_code, is_active, created_at FROM points ORDER BY point_type_id`
 
 	args := pgx.NamedArgs{}
-
-	slog.Debug("executing database raw query", "op", "GetAllPoints", "query", query, "args", args)
+	r.logQuery(ctx, "GetAllPoints", query, args)
 
 	rows, err := r.pool.Query(ctx, query, args)
 	if err != nil {
@@ -337,46 +316,22 @@ func (r *PostgresRepository) GetAllPoints(ctx context.Context) (*domain.Points, 
 		point.CreatedAt = createdAt.Format(time.RFC3339)
 		points = append(points, point)
 	}
-	if err = rows.Err(); err != nil {
-		slog.Warn("Database error reading rows - outside", "error", err)
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-
-	slog.Debug("Got response to GetAllPoints", "response", points)
 
 	return &points, nil
 }
 
-func (r *PostgresRepository) ActivatePoint(ctx context.Context, pointTypeID int) (*domain.Point, error) {
-	query := `UPDATE points SET is_active = true WHERE point_type_id = @point_type_id
+func (r *PostgresRepository) SetPointActive(ctx context.Context, pointTypeID int, active bool) (*domain.Point, error) {
+	query := `UPDATE points SET is_active = @is_active WHERE point_type_id = @point_type_id
 				RETURNING point_id, point_type_id, point_code, is_active, created_at`
 	args := pgx.NamedArgs{
 		"point_type_id": pointTypeID,
+		"is_active":     active,
 	}
 
-	slog.Debug("executing database raw query", "op", "ActivatePoint", "query", query, "args", args)
-
-	point := &domain.Point{}
-	var createdAt time.Time
-	err := r.pool.QueryRow(ctx, query, args).Scan(&point.PointID, &point.PointTypeID, &point.PointCode, &point.IsActive, &createdAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, domain.ErrPointNotFound
-		}
-		return nil, err
-	}
-	point.CreatedAt = createdAt.Format(time.RFC3339)
-	return point, nil
-}
-
-func (r *PostgresRepository) DeactivatePoint(ctx context.Context, pointTypeID int) (*domain.Point, error) {
-	query := `UPDATE points SET is_active = false WHERE point_type_id = @point_type_id
-				RETURNING point_id, point_type_id, point_code, is_active, created_at`
-	args := pgx.NamedArgs{
-		"point_type_id": pointTypeID,
-	}
-
-	slog.Debug("executing database raw query", "op", "DeactivatePoint", "query", query, "args", args)
+	r.logQuery(ctx, "SetPointActive", query, args)
 
 	point := &domain.Point{}
 	var createdAt time.Time

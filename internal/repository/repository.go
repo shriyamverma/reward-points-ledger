@@ -12,13 +12,12 @@ type Repository interface {
 	GetRewardsByMemberID(ctx context.Context, id int) ([]domain.RewardEntry, error)
 	GetBalance(ctx context.Context, memberID int) (int, error)
 
-	GetMembers(ctx context.Context) ([]domain.Member, error)
-	GetRewards(ctx context.Context) ([]domain.RewardEntry, error)
-	GetMemberWithPointCategory(ctx context.Context, id int) (*domain.MemberWithPointCategory, error)
+	GetAllMembers(ctx context.Context) ([]domain.Member, error)
+	GetAllRewards(ctx context.Context) ([]domain.RewardEntry, error)
+	GetMemberPointSummary(ctx context.Context, id int) (*domain.MemberPointSummary, error)
 
 	CreatePoints(ctx context.Context, pointTypeID int, pointCode string) (*domain.Point, error)
 	GetPointDetailsByPointType(ctx context.Context, pointTypeID int) (*domain.Point, error)
 	GetAllPoints(ctx context.Context) (*domain.Points, error)
-	ActivatePoint(context.Context, int) (*domain.Point, error)
-	DeactivatePoint(context.Context, int) (*domain.Point, error)
+	SetPointActive(ctx context.Context, pointTypeID int, active bool) (*domain.Point, error)
 }

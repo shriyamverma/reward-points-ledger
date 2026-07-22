@@ -154,19 +154,19 @@ paths:
       responses:
         '201':
           description: Entry Logged
-  /points/{pointTypeId}:
-    get:
-      tags:
-        - points
-      summary: Get point details
-      parameters:
-        - name: pointTypeId
-          in: path
-          required: true
-          schema: { type: integer }
-      responses:
-        200:
-          description: Success
+#  /points/{pointTypeId}:
+#    get:
+#      tags:
+#        - points
+#      summary: Get point details
+#      parameters:
+#        - name: pointTypeId
+#          in: path
+#          required: true
+#          schema: { type: integer }
+#      responses:
+#        200:
+#          description: Success
   /points/activate:
     post:
       tags:

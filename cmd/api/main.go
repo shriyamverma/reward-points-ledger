@@ -1,8 +1,6 @@
 package main
 
 import (
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,6 +8,9 @@ import (
 	"reward-points-ledger/internal/repository"
 	"reward-points-ledger/internal/service"
 	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
@@ -46,9 +47,9 @@ func main() {
 
 	// 3. Endpoint Mapping
 	r.Post("/members", h.CreateMember)
-	r.Get("/members/{memberId}", h.GetMember)
+	r.Get("/members/{memberId}", h.GetMemberByID)
 	r.Post("/rewards", h.CreateReward)
-	r.Get("/members/{memberId}/rewards", h.GetMemberRewards)
+	r.Get("/members/{memberId}/rewards", h.GetRewardsByMemberID)
 
 	r.Get("/members", h.GetAllMembers)
 	r.Get("/rewards", h.GetAllRewards)
