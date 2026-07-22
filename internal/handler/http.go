@@ -131,7 +131,24 @@ func (h *HTTPHandler) GetRewardsByMemberID(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	entries, err := h.service.GetRewardsByMemberID(ctx, id)
+	limit := 10
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	cursorID := 0
+	if cursorStr := r.URL.Query().Get("cursor"); cursorStr != "" {
+		if c, err := strconv.Atoi(cursorStr); err == nil && c >= 0 {
+			cursorID = c
+		}
+	}
+
+	entries, err := h.service.GetRewardsByMemberID(ctx, id, limit, cursorID)
 	if err != nil {
 		respondWithServiceError(w, r, err)
 		return
@@ -146,7 +163,24 @@ func (h *HTTPHandler) GetRewardsByMemberID(w http.ResponseWriter, r *http.Reques
 func (h *HTTPHandler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	members, err := h.service.GetAllMembers(ctx)
+	limit := 10
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	offset := 0
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
+	members, err := h.service.GetAllMembers(ctx, limit, offset)
 	if err != nil {
 		respondWithServiceError(w, r, err)
 		return
@@ -157,7 +191,24 @@ func (h *HTTPHandler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
 func (h *HTTPHandler) GetAllRewards(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	rewards, err := h.service.GetAllRewards(ctx)
+	limit := 10
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	cursorID := 0
+	if cursorStr := r.URL.Query().Get("cursor"); cursorStr != "" {
+		if c, err := strconv.Atoi(cursorStr); err == nil && c >= 0 {
+			cursorID = c
+		}
+	}
+
+	rewards, err := h.service.GetAllRewards(ctx, limit, cursorID)
 	if err != nil {
 		respondWithServiceError(w, r, err)
 		return

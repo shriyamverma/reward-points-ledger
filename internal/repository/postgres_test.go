@@ -152,11 +152,11 @@ func TestPostgresRepository_GetRewardsByMemberID_Success(t *testing.T) {
 		AddRow(101, memberID, 1, 100, "Sign-up Bonus", mockTime).
 		AddRow(102, memberID, 4, -50, "Coffee Purchase", mockTime)
 
-	mock.ExpectQuery(`SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards`).
-		WithArgs(pgx.NamedArgs{"member_id": memberID}).
+	mock.ExpectQuery(`SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards WHERE member_id = @member_id ORDER BY reward_id DESC LIMIT @limit`).
+		WithArgs(pgx.NamedArgs{"member_id": memberID, "limit": 10}).
 		WillReturnRows(rows)
 
-	rewards, err := repo.GetRewardsByMemberID(context.Background(), memberID)
+	rewards, err := repo.GetRewardsByMemberID(context.Background(), memberID, 10, 0)
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
@@ -183,11 +183,11 @@ func TestPostgresRepository_GetRewardsByMemberID_EmptyList(t *testing.T) {
 	memberID := 2
 
 	rows := pgxmock.NewRows([]string{"reward_id", "member_id", "point_type_id", "points", "description", "event_date"})
-	mock.ExpectQuery(`SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards`).
-		WithArgs(pgx.NamedArgs{"member_id": memberID}).
+	mock.ExpectQuery(`SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards WHERE member_id = @member_id ORDER BY reward_id DESC LIMIT @limit`).
+		WithArgs(pgx.NamedArgs{"member_id": memberID, "limit": 10}).
 		WillReturnRows(rows)
 
-	rewards, err := repo.GetRewardsByMemberID(context.Background(), memberID)
+	rewards, err := repo.GetRewardsByMemberID(context.Background(), memberID, 10, 0)
 	if err != nil {
 		t.Errorf("Expected zero runtime error on empty user ledger search, got: %v", err)
 	}

@@ -133,10 +133,20 @@ func (r *PostgresRepository) AddRewardEntry(ctx context.Context, memberID, point
 	}, nil
 }
 
-func (r *PostgresRepository) GetRewardsByMemberID(ctx context.Context, id int) ([]domain.RewardEntry, error) {
-	query := `SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards WHERE member_id = @member_id ORDER BY event_date DESC`
+func (r *PostgresRepository) GetRewardsByMemberID(ctx context.Context, id int, limit, cursorID int) ([]domain.RewardEntry, error) {
+	query := `SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards WHERE member_id = @member_id`
+	if cursorID > 0 {
+		query += ` AND reward_id < @cursor_id`
+	}
+	query += ` ORDER BY reward_id DESC LIMIT @limit`
 
-	args := pgx.NamedArgs{"member_id": id}
+	args := pgx.NamedArgs{
+		"member_id": id,
+		"limit":     limit,
+	}
+	if cursorID > 0 {
+		args["cursor_id"] = cursorID
+	}
 	r.logQuery(ctx, "GetRewardsByMemberID", query, args)
 
 	rows, err := r.pool.Query(ctx, query, args)
@@ -169,10 +179,13 @@ func (r *PostgresRepository) GetBalance(ctx context.Context, memberID int) (int,
 	return balance, err
 }
 
-func (r *PostgresRepository) GetAllMembers(ctx context.Context) ([]domain.Member, error) {
-	query := `SELECT member_id, name, email, created_at FROM members ORDER BY member_id`
+func (r *PostgresRepository) GetAllMembers(ctx context.Context, limit, offset int) ([]domain.Member, error) {
+	query := `SELECT member_id, name, email, created_at FROM members ORDER BY member_id LIMIT @limit OFFSET @offset`
 
-	args := pgx.NamedArgs{}
+	args := pgx.NamedArgs{
+		"limit":  limit,
+		"offset": offset,
+	}
 	r.logQuery(ctx, "GetAllMembers", query, args)
 
 	rows, err := r.pool.Query(ctx, query, args)
@@ -194,10 +207,19 @@ func (r *PostgresRepository) GetAllMembers(ctx context.Context) ([]domain.Member
 	return allMembers, rows.Err()
 }
 
-func (r *PostgresRepository) GetAllRewards(ctx context.Context) ([]domain.RewardEntry, error) {
-	query := `SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards ORDER BY event_date`
+func (r *PostgresRepository) GetAllRewards(ctx context.Context, limit, cursorID int) ([]domain.RewardEntry, error) {
+	query := `SELECT reward_id, member_id, point_type_id, points, description, event_date FROM rewards`
+	if cursorID > 0 {
+		query += ` WHERE reward_id > @cursor_id`
+	}
+	query += ` ORDER BY reward_id ASC LIMIT @limit`
 
-	args := pgx.NamedArgs{}
+	args := pgx.NamedArgs{
+		"limit": limit,
+	}
+	if cursorID > 0 {
+		args["cursor_id"] = cursorID
+	}
 	r.logQuery(ctx, "GetAllRewards", query, args)
 
 	rows, err := r.pool.Query(ctx, query, args)

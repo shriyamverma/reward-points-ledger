@@ -11,6 +11,21 @@ paths:
       tags:
         - member
       summary: List all registered members
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Max number of members to return
+          schema:
+            type: integer
+            default: 10
+        - name: offset
+          in: query
+          required: false
+          description: Number of members to skip
+          schema:
+            type: integer
+            default: 0
       responses:
         '200':
           description: Success
@@ -82,6 +97,20 @@ paths:
           in: path
           required: true
           schema: { type: integer }
+        - name: limit
+          in: query
+          required: false
+          description: Max number of rewards to return
+          schema:
+            type: integer
+            default: 10
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor ID (reward_id) to retrieve records older than this cursor
+          schema:
+            type: integer
+            default: 0
       responses:
         '200':
           description: Success
@@ -104,6 +133,21 @@ paths:
       tags:
         - reward
       summary: List all reward points in ledger entry
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Max number of rewards to return
+          schema:
+            type: integer
+            default: 10
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor ID (reward_id) to retrieve records newer than this cursor
+          schema:
+            type: integer
+            default: 0
       responses:
         '200':
           description: Success
